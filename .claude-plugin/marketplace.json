@@ -1,0 +1,19 @@
+{
+  "name": "andsim-claude-code-toolkit",
+  "description": "Claude Code plugins built for the Agentic Engineering course.",
+  "owner": {
+    "name": "Andrii Symonenko",
+    "email": "email@my-org.com"
+  },
+  "plugins": [
+    {
+      "name": "my-toolkit",
+      "source": "./plugins/my-toolkit",
+      "version": "1.0.0",
+      "description": "Test plugin for the Agentic Engineering course",
+      "author": {
+        "name": "Andrii Symonenko"
+      }
+    }
+  ]
+}
