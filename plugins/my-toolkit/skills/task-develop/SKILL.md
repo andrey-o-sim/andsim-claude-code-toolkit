@@ -1,17 +1,20 @@
 ---
 name: task-develop
-description: Develop a task described in a local markdown file end to end - read its acceptance criteria and scope of work, plan with an Opus sub-agent, implement with a Sonnet agent, audit the result against the AC, run PrReviewer, then hand over for human review. Takes the path to the task file; no issue tracker involved.
-argument-hint: "<taskName> - absolute or relative path to the task .md file"
+description: Develop a task end to end, starting from a discussion. Works out what to build with the user, writes it up as docs/tasks/<name>.md, plans with an Opus sub-agent, implements with a Sonnet agent, audits the result against the acceptance criteria, runs PrReviewer, then hands over for human review. Pass a path to reuse a task file that already exists. No issue tracker involved.
+argument-hint: "[taskName] - short name for a new task, or a path to an existing task .md file. Omit it to start from a blank discussion"
 model: opus
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TodoWrite, Agent, Skill, EnterPlanMode, ExitPlanMode
 ---
 
-# Develop a task from a task file
+# Develop a task, from discussion to PR
 
-Drive one task from "not started" to "reviewed, committed, and in a PR that PrReviewer
-approves". The task is described in a markdown file in the repo or on disk - there is no issue
-tracker in this flow, so that file is the only source of truth for what the work is.
+Drive one task from "we have not decided what to build yet" to "reviewed, committed, and in a PR
+that PrReviewer approves".
+
+There is no issue tracker in this flow. The skill works out the task with the user, writes it to
+`docs/tasks/<name>.md`, and that file is the source of truth for the rest of the run. If a task
+file already exists, pass its path and the discussion is skipped.
 
 The work is split across models on purpose: Opus plans and judges, Sonnet implements.
 Planning and judging need the stronger model because a wrong plan is expensive to undo; writing
@@ -39,79 +42,130 @@ user closes the session and comes back tomorrow. A todo list dies with the sessi
 not. The plan file is the progress record, so an interrupted run can be picked up from the first
 unticked box instead of starting again.
 
-## Working files
+## Files
 
-Everything this skill writes for itself goes in one place, keyed by task:
+Two different kinds, and they are treated differently:
 
 ```
-.claude/task-develop/<TASK>/plan.md        the approved plan, and the progress record
-.claude/task-develop/<TASK>/ac-audit.md    AC audit findings and PrReviewer disagreements
+docs/tasks/<TASK>.md                       the task: what and why. Part of the change.
+.claude/task-develop/<TASK>/plan.md        the plan: how. Working file.
+.claude/task-develop/<TASK>/ac-audit.md    audit findings and PrReviewer disagreements.
 ```
 
-`<TASK>` is the task file's name without its extension: `docs/tasks/add-refunds.md` gives
-`.claude/task-develop/add-refunds/`. Keying off the file name rather than the full path keeps the
-folder readable, and the plan records the full path anyway.
+`<TASK>` is a short kebab-case name: `add-refunds`. It names the task file and the working folder,
+so both are easy to find later.
+
+**The task file is part of the change.** It lives in the repo and is staged with the code at step
+10, so the history says what was asked for next to what was built. Everything under
+`.claude/task-develop/` is a working artifact: never staged, but named in the step 9 handoff so
+the user knows it exists.
+
+The task file and the plan stay separate on purpose. The task file is the only record of the
+acceptance criteria that the planner never touched - the audit at step 7 judges the code against
+*it*, not against the plan's claims about it.
 
 From step 6 on, `plan.md` is not read-only. Tick its `### Progress` boxes as each step finishes,
 so the file always says how far the run got.
 
-These are working artifacts, not part of the change. Do not stage them in the commit at step 10,
-and name them in the step 9 handoff so the user knows they exist.
-
 ---
 
-## Step 1 - Read the task file
+## Step 1 - Settle the task
 
-The argument is `taskName`: a path to a markdown file describing the task. It may be absolute
-(`F:/tasks/add-refunds.md`) or relative to the current working directory
-(`docs/tasks/add-refunds.md`). A bare name with no `.md` is a path too - try it with `.md`
-appended before giving up.
+The argument is `taskName`, and it is optional. Three forms:
 
-No argument: ask for the path and stop. Do not start work without one.
+| Argument | What it means |
+|----------|---------------|
+| A path to an existing `.md` file | The user already wrote the task. **Read it** - go to "Reading an existing task" below. |
+| A short name (`add-refunds`) | Check `docs/tasks/<name>.md`. If it exists, read it. If not, this is a new task - **discuss it**. |
+| Nothing | A new task with no name yet. Ask what they want to build, then derive a kebab-case name from the answer and confirm it. |
+
+Either way, step 1 ends with the same thing in hand: acceptance criteria, scope of work, and the
+target repository.
+
+### Reading an existing task
 
 Read the file with `Read`. If nothing is there, stop and say which paths you tried. **Never
 reconstruct a task from its file name** - a guessed task produces a confident plan for the wrong
 work, which is worse than no plan.
 
-From the file, take:
+Take from it:
 
 - **Acceptance criteria**, copied word for word, itemised as `AC-1`, `AC-2`, ... The wording must
   stay verbatim because the audit at step 7 compares the code against these exact sentences. A
   paraphrase quietly moves the goalposts.
-- The title, the description, the kind of change, and the repository the change belongs in.
+- The **Scope of Work**: what is deliberately in, and what is out. Heading wording varies - look
+  for `Scope of Work`, `Scope of work`, `SoW`, or `Scope`.
+- The title, the description, and the repository the change belongs in.
 
-A task file is written by a human, so its headings vary. Read the whole file before deciding
-something is missing - the criteria may sit under `Acceptance criteria`, `AC`, `Done when`, or
-plain prose. If after reading it there really are no acceptance criteria, that is an open question
-for step 3, not something to invent.
+A human wrote this file, so its headings vary. Read the whole thing before deciding something is
+missing - the criteria may sit under `Acceptance criteria`, `AC`, `Done when`, or plain prose. If
+after reading there really are no acceptance criteria, or no scope, that is an open question for
+step 3, not something to invent. Then skip step 2: the file already exists and the user wrote it.
 
-Also note the **full path** you read it from. It goes in the plan at step 4, so a later session
-can find the task again.
+### Discussing a new task
+
+This is a conversation, not a form to fill in. Use `AskUserQuestion`, up to 4 questions per call,
+so the user answers in batches instead of a drip of prompts.
+
+**Read the code before asking.** A question you could have answered by opening a file costs the
+user a round trip and makes the rest of the questions look careless. Search first, then ask about
+what is genuinely undecided.
+
+Cover these, in this order:
+
+1. **What and why.** What should change, and what problem it solves. Without the why, every later
+   judgement call gets made blind.
+2. **Acceptance criteria.** Turn the answer into numbered, checkable sentences and show them back.
+   "Refunds work" is not a criterion. "A refund of more than the original charge is rejected with
+   a 422" is. Each one must be something you could point a test at.
+3. **Scope of work.** What is in. Then ask specifically what is *out* - users rarely volunteer
+   this, and it is the main defence against a plan that grows past the task.
+4. **Where.** Which repository, and which part of the code.
+5. **Anything that is not yours to decide.** Data loss, a change to a public contract, a
+   migration, UI with no design attached.
+
+Keep going until you could write the task file yourself without guessing at any part of it. Do not
+pad the criteria with things the user did not ask for - an invented AC is work nobody wanted, and
+the audit at step 7 will dutifully enforce it.
 
 **Done when:**
 
-- [ ] The file was read from a path that exists - not assumed from the name
-- [ ] Every criterion copied word for word as `AC-1 .. AC-n`
-- [ ] The target repository is known, not assumed
-- [ ] `<TASK>` fixed as the file name without its extension, and the full path noted
-
-## Step 2 - Read the Scope of Work
-
-The task file carries a **Scope of Work** section. Find it and read it. Heading wording varies -
-look for `Scope of Work`, `Scope of work`, `SoW`, or `Scope`.
-
-Scope of Work tells you what is deliberately *in* and what is *out*. It is the main defence
-against a plan that grows past the task.
-
-If there is no such section, or it contradicts the acceptance criteria, that is an open question
-for step 3. Do not fill the gap yourself.
-
-**Done when:**
-
-- [ ] The Scope of Work section was found and read, or its absence recorded as a question
+- [ ] Acceptance criteria are checkable sentences the user agreed to - read or agreed, never invented
 - [ ] What is *out* of scope is written down, not only what is in
+- [ ] The target repository is known, not assumed
+- [ ] `<TASK>` fixed as a short kebab-case name
+
+## Step 2 - Write the task file and confirm it
+
+**Skip this step if step 1 read an existing file.** It is already written and already the user's.
+
+Read `references/task-template.md` and write `docs/tasks/<TASK>.md` from it. Create `docs/tasks/`
+if it is not there.
+
+Then show it and wait for a yes. This is a plain confirmation in the conversation - not plan mode,
+and nothing is cleared.
+
+This gate is here because the criteria are copied verbatim into the plan at step 4 and judged
+verbatim at step 7. A criterion that is wrong here is wrong everywhere downstream, and the audit
+will confirm the wrong thing with a straight face. One round of reading now is cheaper than a
+re-plan later.
+
+**Corrections:** edit the file, show it again, repeat. No cap on rounds, and no reason to push for
+approval.
+
+**Done when:**
+
+- [ ] `docs/tasks/<TASK>.md` written, following the template
+- [ ] The user approved it - not "did not object"
+- [ ] The file on disk matches the version they approved
 
 ## Step 3 - Resolve open questions
+
+If step 1 was a discussion, most of this is already done - do not ask the same questions twice.
+Re-read the approved task file and check only for what the implementation needs and the task file
+does not say. Usually that is a short list, or empty.
+
+If step 1 read an existing file, this is the full gate.
 
 Ask the user about anything that would change the plan. Use `AskUserQuestion` and batch up to 4
 questions per call, so the user answers in one pass instead of a drip of prompts.
@@ -147,11 +201,11 @@ Agent(subagent_type: "Plan", model: "opus", prompt: <brief>)
 ```
 
 The sub-agent has no memory of this conversation, so the brief must carry everything: the task
-name and title, the full path to the task file, the AC list verbatim, the Scope of Work verbatim,
+name and title, the path `docs/tasks/<TASK>.md`, the AC list verbatim, the Scope of Work verbatim,
 every answer from step 3, and the repository path.
 
 Pass the AC and the Scope of Work as text in the brief. Do not tell the sub-agent to go and read
-the task file itself - it would read the same file you already read, and a second reading is a
+the task file itself - it would read the same file you already have, and a second reading is a
 second chance to paraphrase a criterion. The path is for the record, not for the sub-agent to
 work from.
 
@@ -210,7 +264,9 @@ Agent(subagent_type: "general-purpose", model: "sonnet", prompt: <brief>)
 The brief must contain:
 
 - The path to `.claude/task-develop/<TASK>/plan.md`, and an instruction to read it in full
-- The task name, and the full path to the task file
+- The task name, and the path `docs/tasks/<TASK>.md`
+- An instruction **not** to edit the task file. It records what was asked for, so changing it to
+  match the code would erase the only thing the audit at step 7 can check against
 - An instruction to follow the repo's own `CLAUDE.md` conventions
 - An instruction to write the tests named in the plan's Test Plan, in the same change
 - An instruction to build and run the test suite, and to report the real output - a failing suite
@@ -273,7 +329,8 @@ Report, in this order:
 3. AC audit result - each `AC-n`, met or not
 4. PrReviewer result - fixed, and disputed with reasoning
 5. Anything left out, and why
-6. The working files under `.claude/task-develop/<TASK>/`
+6. `docs/tasks/<TASK>.md`, which goes into the commit, and the working files under
+   `.claude/task-develop/<TASK>/`, which do not
 
 Then stop and wait.
 
@@ -305,11 +362,14 @@ that plainly, so nobody assumes the work is on the remote.
 
 Step 12 needs the PR URL from step 11. With no PR there is nothing to babysit, so do not offer it.
 
-Do not stage the `.claude/task-develop/` working files in the commit.
+**What goes in the commit:** the code, the tests, and `docs/tasks/<TASK>.md`. The task file is
+part of the change - it is why the rest of the diff exists. Never stage anything under
+`.claude/task-develop/`.
 
 **Done when:**
 
 - [ ] Each offer was made on its own, and a "no" ended the run
+- [ ] `docs/tasks/<TASK>.md` is in the commit
 - [ ] `.claude/task-develop/` is not in the commit
 - [ ] If the PR was declined, the user was told the branch is still local
 - [ ] The babysitter got a real PR URL, or was not offered at all

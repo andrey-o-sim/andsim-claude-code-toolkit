@@ -55,17 +55,18 @@ You can also browse everything interactively with `/plugin`.
 
 | Plugin | Version | What it gives you |
 | --- | --- | --- |
-| `my-toolkit` | 1.1.0 | Toolkits created in context of the Agentic Engineering course. Contains one command, two skills and one hook (see below). |
+| `my-toolkit` | 1.2.0 | Toolkits created in context of the Agentic Engineering course. Contains one command, two skills and one hook (see below). |
 
 ### `my-toolkit` contents
 
 - **Command `/claude-audit`** — audits a project `CLAUDE.md` against 7 quality criteria and reports
   problems. Read-only: it verifies every claim against the real code and suggests fixes, but edits
   nothing. Takes an optional path, defaults to `./CLAUDE.md`.
-- **Skill `task-develop`** — drives one task end to end from a markdown file: reads the acceptance
-  criteria and scope of work, plans with an Opus sub-agent, implements with a Sonnet agent, audits
-  the result against the AC, runs the PR reviewer, then hands over for human review. Takes the path
-  to the task file. Needs the Bitbucket MCP server for the PR steps.
+- **Skill `task-develop`** — drives one task end to end, starting from a discussion. It works out
+  with you what to build, writes it up as `docs/tasks/<name>.md` and waits for your yes, then plans
+  with an Opus sub-agent, implements with a Sonnet agent, audits the result against the acceptance
+  criteria, runs the PR reviewer, and hands over for human review. Pass a path to reuse a task file
+  that already exists.
 - **Skill `migration-sql-script`** — generates the forward and rollback SQL for a range of EF Core
   migrations in a .NET repo, and rewrites index creation to `CREATE INDEX CONCURRENTLY`. It shows
   the detected range and waits for a yes before running anything, and never applies SQL itself.

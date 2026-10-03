@@ -101,8 +101,12 @@ nothing else.
 ````markdown
 ## Post-approval workflow
 
-This plan is the only thing that survived the context clear. Working files live in
-`.claude/task-develop/<TASK>/`.
+This plan is the only thing that survived the context clear. Two files on disk back it up:
+
+- `docs/tasks/<TASK>.md` - the task as the user approved it. Read it if an acceptance criterion
+  here looks ambiguous. **Never edit it**: it records what was asked for, and changing it to match
+  the code would erase the only thing step 7 can check against. It is staged with the change.
+- `.claude/task-develop/<TASK>/` - plan and audit working files. Never staged.
 
 ### Progress
 
@@ -137,9 +141,9 @@ source of truth; the todo list is only a view of it and disappears with the sess
 `Skill(skill: "corp-dev:create-branch")`. Then spawn one implementer:
 `Agent(subagent_type: "general-purpose", model: "sonnet", ...)`. Tell it to read
 `.claude/task-develop/<TASK>/plan.md` in full, follow the repo's `CLAUDE.md` conventions, write
-the tests in the Test Plan as part of the same change, and run the Verification commands. It must
-report the real build and test output. A failing suite reported as passing wastes every step
-after this one.
+the tests in the Test Plan as part of the same change, and run the Verification commands. Tell it
+not to edit `docs/tasks/<TASK>.md`. It must report the real build and test output. A failing
+suite reported as passing wastes every step after this one.
 
 Done when: not on the default branch; the implementer read the plan in full; the Test Plan tests
 exist in the same change; build and test output reported as it actually was.
@@ -164,10 +168,10 @@ Done when: PrReviewer ran or its absence was stated plainly; every valid finding
 finding recorded with reasoning.
 
 **Step 9 - Human review.** Report: what changed, the real build and test output, each `AC-n` met
-or not, PrReviewer findings fixed and disputed, anything left out and why, and the working files under
-`.claude/task-develop/<TASK>/`. Then stop and wait. If the user comments, address the comments
-and **return to step 7** - a fix made at review time is exactly the kind of change that quietly
-breaks an AC.
+or not, PrReviewer findings fixed and disputed, anything left out and why, and which files are
+where - `docs/tasks/<TASK>.md` goes into the commit, `.claude/task-develop/<TASK>/` does not.
+Then stop and wait. If the user comments, address the comments and **return to step 7** - a fix
+made at review time is exactly the kind of change that quietly breaks an AC.
 
 Done when: all six points reported including what was left out; anything that failed reported as
 failed; stopped and waited instead of rolling on into a commit.
@@ -184,9 +188,10 @@ There is no separate push step - `create-pr` pushes the branch as part of its ow
 user commits but declines the PR, the branch stays local; say so, or they may assume it is on the
 remote. Step 12 needs the PR URL from step 11; with no PR there is nothing to babysit.
 
-Do not stage `.claude/task-develop/` in the commit - those are working files, not the change.
+Stage `docs/tasks/<TASK>.md` with the code - the task is part of the change, and it is why the
+rest of the diff exists. Never stage `.claude/task-develop/`; those are working files.
 
-Done when: each offer was made on its own and a "no" ended the run; the working files are not in
-the commit; the user was told if the branch is still local; the babysitter got a real PR URL or
-was not offered at all.
+Done when: each offer was made on its own and a "no" ended the run; the task file is in the
+commit and the working files are not; the user was told if the branch is still local; the
+babysitter got a real PR URL or was not offered at all.
 ````
