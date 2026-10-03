@@ -1,0 +1,143 @@
+# autodoc on pull request — template.
+#
+# Copy this into the repository you want documented, as
+# .github/workflows/autodoc.yml, and change the two values marked EDIT ME.
+#
+# What it does: on every push to an open PR, it runs the autodoc agent over
+# `base...head`, and if the agent produced a doc change, commits it onto the PR
+# branch. The doc update lands inside the PR, so it is reviewed with the code
+# that caused it.
+#
+# The repository being documented must carry an `autodoc` block in its
+# CLAUDE.md. See sdk/autodoc.ps1 for the keys.
+#
+# ── Forks ────────────────────────────────────────────────────────────────────
+#
+# A PR from a fork cannot be pushed to with the default token, so this workflow
+# posts the proposed documentation as a PR comment instead. Do not "fix" that by
+# switching to pull_request_target: that event runs with a writable token in the
+# context of the base repo, while checking out code the PR author controls.
+#
+# ── Loops ────────────────────────────────────────────────────────────────────
+#
+# Pushing to the PR branch triggers this workflow again. The second run sees a
+# change set that touched only docs, so the agent skips and nothing is pushed —
+# the loop stops after one extra run. The `github.actor` guard below cuts even
+# that one.
+
+name: autodoc
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autodoc:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          # The head commit itself, not the merge commit GitHub builds. We need
+          # the real branch tip to push back to it.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history: the agent runs `git diff base...head`, which needs the
+          # merge base. The default shallow clone does not have it.
+          fetch-depth: 0
+
+      - name: Check out the toolkit that holds autodoc
+        uses: actions/checkout@v4
+        with:
+          repository: <your-org>/andsim-claude-code-toolkit   # EDIT ME
+          ref: master
+          path: .autodoc-toolkit
+
+      - name: Install the Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      # pwsh is preinstalled on the GitHub-hosted runners, so the same script
+      # runs here and on a Windows laptop. There is no bash twin to drift from.
+      - name: Run autodoc
+        id: autodoc
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -File .autodoc-toolkit/sdk/autodoc.ps1 "$BASE_SHA" "$HEAD_SHA" \
+            > autodoc-result.json
+          echo "action=$(jq -r '.action' autodoc-result.json)" >> "$GITHUB_OUTPUT"
+          echo "doc_path=$(jq -r '.doc_path' autodoc-result.json)" >> "$GITHUB_OUTPUT"
+          echo "summary=$(jq -r '.summary' autodoc-result.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Report to the job summary
+        run: |
+          {
+            echo "## autodoc"
+            echo
+            echo "- action: \`${{ steps.autodoc.outputs.action }}\`"
+            echo "- document: \`${{ steps.autodoc.outputs.doc_path }}\`"
+            echo "- ${{ steps.autodoc.outputs.summary }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The agent left its work in the working tree. Everything below decides
+      # what happens to it — that decision lives here, never in the script.
+
+      - name: Commit the doc update to the PR branch
+        if: >-
+          steps.autodoc.outputs.action != 'skipped' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          DOC_PATH: ${{ steps.autodoc.outputs.doc_path }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$DOC_PATH"
+          if git diff --cached --quiet; then
+            echo "Agent reported '${{ steps.autodoc.outputs.action }}' but the file is unchanged on disk."
+            echo "Nothing to push."
+            exit 0
+          fi
+          git commit -m "docs: update ${DOC_PATH} [autodoc]"
+          git push origin "HEAD:${HEAD_REF}"
+
+      - name: Post the doc as a comment instead (fork PR)
+        if: >-
+          steps.autodoc.outputs.action != 'skipped' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/github-script@v7
+        env:
+          DOC_PATH: ${{ steps.autodoc.outputs.doc_path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.DOC_PATH;
+            const body = [
+              '**autodoc** proposes a documentation update for `' + path + '`.',
+              '',
+              'This PR comes from a fork, so the workflow cannot push to its branch.',
+              'Copy the content below into that file if it looks right.',
+              '',
+              '<details><summary>' + path + '</summary>',
+              '',
+              '```markdown',
+              fs.readFileSync(path, 'utf8'),
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });

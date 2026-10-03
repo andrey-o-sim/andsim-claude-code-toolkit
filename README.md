@@ -16,6 +16,7 @@ plugins/<plugin-name>/            one folder per plugin
   .claude-plugin/plugin.json      plugin manifest (name, version, description, author)
   commands/                       slash commands
   skills/                         skills
+  hooks/hooks.json                hook definitions, plus the scripts they run
 ```
 
 This is a learning repo. The plugins here are examples, not production tooling.
@@ -54,17 +55,52 @@ You can also browse everything interactively with `/plugin`.
 
 | Plugin | Version | What it gives you |
 | --- | --- | --- |
-| `my-toolkit` | 1.0.0 | Test plugin for the Agentic Engineering course. Contains one command and one skill (see below). |
+| `my-toolkit` | 1.1.0 | Toolkits created in context of the Agentic Engineering course. Contains one command, two skills and one hook (see below). |
 
 ### `my-toolkit` contents
 
 - **Command `/claude-audit`** — audits a project `CLAUDE.md` against 7 quality criteria and reports
   problems. Read-only: it verifies every claim against the real code and suggests fixes, but edits
   nothing. Takes an optional path, defaults to `./CLAUDE.md`.
-- **Skill `task-develop`** — drives one Jira ticket end to end: reads the acceptance criteria and
-  scope of work, plans with an Opus sub-agent, implements with a Sonnet agent, audits the result
-  against the AC, runs the PR reviewer, then hands over for human review. Needs Jira and Bitbucket
-  MCP servers to be configured.
+- **Skill `task-develop`** — drives one task end to end from a markdown file: reads the acceptance
+  criteria and scope of work, plans with an Opus sub-agent, implements with a Sonnet agent, audits
+  the result against the AC, runs the PR reviewer, then hands over for human review. Takes the path
+  to the task file. Needs the Bitbucket MCP server for the PR steps.
+- **Skill `migration-sql-script`** — generates the forward and rollback SQL for a range of EF Core
+  migrations in a .NET repo, and rewrites index creation to `CREATE INDEX CONCURRENTLY`. It shows
+  the detected range and waits for a yes before running anything, and never applies SQL itself.
+- **Hook `pre-commit`** — a `PreToolUse` hook on `git commit` that runs build, `dotnet format style`
+  and the tests, and blocks the commit with the reason when a step fails. See below.
+
+#### The `pre-commit` hook
+
+One hook entry, one script, three steps in order: build → format → tests. The build runs once and
+the steps after it use `--no-build`, which is why this is one hook and not several.
+
+It works out the repo layout on its own: the first `*.slnx` or `*.sln` in the root, test projects by
+their `Microsoft.NET.Test.Sdk` reference, and which of those need Docker by their `Testcontainers`
+reference. To say it explicitly instead, put a fenced `precommit` block in the repo's `CLAUDE.md`:
+
+````markdown
+```precommit
+solution:      MyApp.slnx
+unit-tests:    tests/MyApp.Domain.UnitTests
+               tests/MyApp.Application.UnitTests
+needs-docker:  tests/MyApp.Integration.Tests
+```
+````
+
+Every key is optional — anything you leave out is discovered. A path can be the `.csproj` or the
+folder holding it. When no .NET layout can be found at all, the hook does nothing and lets the
+commit through; it never blocks a commit because it failed to understand the repo.
+
+Escape hatches for one commit:
+
+```
+PRECOMMIT_TESTS=unit git commit -m "..."     skip the tests that need Docker
+PRECOMMIT_TESTS=none git commit -m "..."     skip the tests entirely
+PRECOMMIT_TIMEOUT=600 git commit -m "..."    raise the per-step time limit (default 180s)
+```
 
 ## Maintainers
 

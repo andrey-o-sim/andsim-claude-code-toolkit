@@ -11,28 +11,28 @@ Two sections carry more weight than the rest:
   conversation, so the skill's instructions disappear. This section is the only copy of steps 6-12
   that survives. It also carries the `### Progress` checklist, which is ticked in the plan file as
   the work goes - that is what lets an interrupted run resume in a new session instead of starting
-  over. Copy the section exactly as written at the bottom of this file, substituting the ticket
-  key. Do not summarise it, do not shorten it.
+  over. Copy the section exactly as written at the bottom of this file, substituting the task
+  name. Do not summarise it, do not shorten it.
 
 ---
 
 ## Template
 
 ````markdown
-# <TICKET>: <ticket summary>
+# <TASK>: <task title>
 
-Jira: <ticket URL>
+Task file: <absolute or relative path to the task .md file>
 Repository: <repo name and local path>
 Target branch: <branch this merges into>
 
 ## Task Summary
 
 Two or three sentences. What the change does and why it is wanted. Written so someone who has not
-read the ticket can follow the rest of the plan.
+read the task file can follow the rest of the plan.
 
 ## Acceptance Criteria
 
-| ID | Criterion (verbatim from the ticket) | Delivered by |
+| ID | Criterion (verbatim from the task file) | Delivered by |
 |----|--------------------------------------|--------------|
 | AC-1 | ... | Task 1, Task 3 |
 | AC-2 | ... | Task 2 |
@@ -42,12 +42,12 @@ rather than leaving the cell empty.
 
 ## Scope of Work
 
-Copied from the ticket's Scope of Work section.
+Copied from the task file's Scope of Work section.
 
 ### Out of scope
 
-What the ticket deliberately excludes, plus anything nearby that a reader might assume is
-included. Being explicit here is what stops the change growing past the ticket.
+What the task file deliberately excludes, plus anything nearby that a reader might assume is
+included. Being explicit here is what stops the change growing past the task.
 
 ## Decisions taken
 
@@ -94,7 +94,7 @@ that mattered.
 
 ## The Post-approval workflow block
 
-Copy this into the plan exactly, replacing `<TICKET>` with the ticket key. It is written as
+Copy this into the plan exactly, replacing `<TASK>` with the task name. It is written as
 instructions to whoever reads the plan after the context clear, because that reader will have
 nothing else.
 
@@ -102,7 +102,7 @@ nothing else.
 ## Post-approval workflow
 
 This plan is the only thing that survived the context clear. Working files live in
-`.claude/task-develop/<TICKET>/`.
+`.claude/task-develop/<TASK>/`.
 
 ### Progress
 
@@ -136,7 +136,7 @@ source of truth; the todo list is only a view of it and disappears with the sess
 **Step 6 - Implement.** If the current branch is the repo's default branch, first run
 `Skill(skill: "corp-dev:create-branch")`. Then spawn one implementer:
 `Agent(subagent_type: "general-purpose", model: "sonnet", ...)`. Tell it to read
-`.claude/task-develop/<TICKET>/plan.md` in full, follow the repo's `CLAUDE.md` conventions, write
+`.claude/task-develop/<TASK>/plan.md` in full, follow the repo's `CLAUDE.md` conventions, write
 the tests in the Test Plan as part of the same change, and run the Verification commands. It must
 report the real build and test output. A failing suite reported as passing wastes every step
 after this one.
@@ -148,7 +148,7 @@ exist in the same change; build and test output reported as it actually was.
 implementer, which is a poor judge of its own work. Give it the plan path, the Acceptance Criteria
 table, and `git diff` against the target branch. It checks the code and tests against each
 criterion, and returns `AC-n: met | not met | unclear` with evidence. Write findings to
-`.claude/task-develop/<TICKET>/ac-audit.md`, fix them, then re-run the audit to confirm. After 3
+`.claude/task-develop/<TASK>/ac-audit.md`, fix them, then re-run the audit to confirm. After 3
 rounds with findings still open, stop and hand them to the user - that means the plan is wrong,
 not the code.
 
@@ -165,7 +165,7 @@ finding recorded with reasoning.
 
 **Step 9 - Human review.** Report: what changed, the real build and test output, each `AC-n` met
 or not, PrReviewer findings fixed and disputed, anything left out and why, and the working files under
-`.claude/task-develop/<TICKET>/`. Then stop and wait. If the user comments, address the comments
+`.claude/task-develop/<TASK>/`. Then stop and wait. If the user comments, address the comments
 and **return to step 7** - a fix made at review time is exactly the kind of change that quietly
 breaks an AC.
 

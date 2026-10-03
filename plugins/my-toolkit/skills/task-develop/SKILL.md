@@ -1,16 +1,19 @@
 ---
 name: task-develop
-description: Develop a Jira ticket end to end - read its acceptance criteria and scope of work, plan with an Opus sub-agent, implement with a Sonnet agent, audit the result against the AC, run PrReviewer, then hand over for human review.
-argument-hint: "<JIRA-KEY or Jira URL>"
+description: Develop a task described in a local markdown file end to end - read its acceptance criteria and scope of work, plan with an Opus sub-agent, implement with a Sonnet agent, audit the result against the AC, run PrReviewer, then hand over for human review. Takes the path to the task file; no issue tracker involved.
+argument-hint: "<taskName> - absolute or relative path to the task .md file"
 model: opus
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TodoWrite, Agent, Skill, EnterPlanMode, ExitPlanMode, mcp__plugin_corp-mcp_atlassian-jira-dc__*, mcp__atlassian-bitbucket-dc__*, mcp__plugin_corp-mcp_atlassian-bitbucket-dc__*, mcp__corp-docs__*, mcp__plugin_corp-mcp_corp-docs__*
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, TodoWrite, Agent, Skill, EnterPlanMode, ExitPlanMode
 ---
 
-# Develop a task from a Jira ticket
+# Develop a task from a task file
 
-Drive one Jira ticket from "not started" to "reviewed, committed, and in a PR that PrReviewer
-approves". The work is split across models on purpose: Opus plans and judges, Sonnet implements.
+Drive one task from "not started" to "reviewed, committed, and in a PR that PrReviewer
+approves". The task is described in a markdown file in the repo or on disk - there is no issue
+tracker in this flow, so that file is the only source of truth for what the work is.
+
+The work is split across models on purpose: Opus plans and judges, Sonnet implements.
 Planning and judging need the stronger model because a wrong plan is expensive to undo; writing
 code against an approved plan does not.
 
@@ -38,12 +41,16 @@ unticked box instead of starting again.
 
 ## Working files
 
-Everything this skill writes for itself goes in one place, keyed by ticket:
+Everything this skill writes for itself goes in one place, keyed by task:
 
 ```
-.claude/task-develop/<TICKET>/plan.md        the approved plan, and the progress record
-.claude/task-develop/<TICKET>/ac-audit.md    AC audit findings and PrReviewer disagreements
+.claude/task-develop/<TASK>/plan.md        the approved plan, and the progress record
+.claude/task-develop/<TASK>/ac-audit.md    AC audit findings and PrReviewer disagreements
 ```
+
+`<TASK>` is the task file's name without its extension: `docs/tasks/add-refunds.md` gives
+`.claude/task-develop/add-refunds/`. Keying off the file name rather than the full path keeps the
+folder readable, and the plan records the full path anyway.
 
 From step 6 on, `plan.md` is not read-only. Tick its `### Progress` boxes as each step finishes,
 so the file always says how far the run got.
@@ -53,39 +60,48 @@ and name them in the step 9 handoff so the user knows they exist.
 
 ---
 
-## Step 1 - Read the ticket
+## Step 1 - Read the task file
 
-The argument is a Jira key (`SPSD-12345`) or a Jira URL. Pull the key out of a URL.
+The argument is `taskName`: a path to a markdown file describing the task. It may be absolute
+(`F:/tasks/add-refunds.md`) or relative to the current working directory
+(`docs/tasks/add-refunds.md`). A bare name with no `.md` is a path too - try it with `.md`
+appended before giving up.
 
-No argument: ask for the ticket key and stop. Do not start work without one.
+No argument: ask for the path and stop. Do not start work without one.
 
-Read the issue with `jira_getIssue`. If the Jira MCP is not connected, stop and say so. **Never
-reconstruct a ticket from its key** - a guessed ticket produces a confident plan for the wrong
+Read the file with `Read`. If nothing is there, stop and say which paths you tried. **Never
+reconstruct a task from its file name** - a guessed task produces a confident plan for the wrong
 work, which is worse than no plan.
 
-From the issue, take:
+From the file, take:
 
 - **Acceptance criteria**, copied word for word, itemised as `AC-1`, `AC-2`, ... The wording must
   stay verbatim because the audit at step 7 compares the code against these exact sentences. A
   paraphrase quietly moves the goalposts.
-- Summary, description, issue type, component, and the repository the change belongs in.
+- The title, the description, the kind of change, and the repository the change belongs in.
 
-If the ticket has no acceptance criteria, that is an open question for step 3, not something to
-invent.
+A task file is written by a human, so its headings vary. Read the whole file before deciding
+something is missing - the criteria may sit under `Acceptance criteria`, `AC`, `Done when`, or
+plain prose. If after reading it there really are no acceptance criteria, that is an open question
+for step 3, not something to invent.
+
+Also note the **full path** you read it from. It goes in the plan at step 4, so a later session
+can find the task again.
 
 **Done when:**
 
-- [ ] `jira_getIssue` returned a real issue for the key
+- [ ] The file was read from a path that exists - not assumed from the name
 - [ ] Every criterion copied word for word as `AC-1 .. AC-n`
 - [ ] The target repository is known, not assumed
+- [ ] `<TASK>` fixed as the file name without its extension, and the full path noted
 
 ## Step 2 - Read the Scope of Work
 
-The ticket description carries a **Scope of Work** section. Find it and read it. Heading wording
-varies - look for `Scope of Work`, `Scope of work`, `SoW`, or `Scope`.
+The task file carries a **Scope of Work** section. Find it and read it. Heading wording varies -
+look for `Scope of Work`, `Scope of work`, `SoW`, or `Scope`.
 
 Scope of Work tells you what is deliberately *in* and what is *out*. It is the main defence
-against a plan that grows past the ticket.
+against a plan that grows past the task.
 
 If there is no such section, or it contradicts the acceptance criteria, that is an open question
 for step 3. Do not fill the gap yourself.
@@ -105,11 +121,11 @@ Worth asking about:
 - Acceptance criteria missing, or too vague to check
 - Scope of Work missing, or in conflict with the AC
 - Behaviour that could reasonably go two ways
-- Which repository, when the ticket does not say
+- Which repository, when the task file does not say
 - UI work with no design attached
 - A decision that is not yours to make: data loss, a public contract change, a migration
 
-Not worth asking about: anything you can settle by reading the code or the ticket. Read first,
+Not worth asking about: anything you can settle by reading the code or the task file. Read first,
 then ask about what is left.
 
 If an answer opens a new question, ask again. Move to step 4 only when nothing is open. This is
@@ -130,9 +146,14 @@ Spawn one sub-agent to write the plan:
 Agent(subagent_type: "Plan", model: "opus", prompt: <brief>)
 ```
 
-The sub-agent has no memory of this conversation, so the brief must carry everything: ticket key
-and title, the AC list verbatim, the Scope of Work verbatim, every answer from step 3, and the
-repository path.
+The sub-agent has no memory of this conversation, so the brief must carry everything: the task
+name and title, the full path to the task file, the AC list verbatim, the Scope of Work verbatim,
+every answer from step 3, and the repository path.
+
+Pass the AC and the Scope of Work as text in the brief. Do not tell the sub-agent to go and read
+the task file itself - it would read the same file you already read, and a second reading is a
+second chance to paraphrase a criterion. The path is for the record, not for the sub-agent to
+work from.
 
 Read `references/plan-template.md` and pass the template to the sub-agent. It defines the sections
 the plan must have, including the `## Post-approval workflow` block that has to survive the
@@ -140,7 +161,7 @@ context clear.
 
 When the sub-agent returns:
 
-1. Write the plan to `.claude/task-develop/<TICKET>/plan.md`.
+1. Write the plan to `.claude/task-develop/<TASK>/plan.md`.
 2. Check the `## Post-approval workflow` section is present and complete. If it is not, fix it
    yourself from the template before going on.
 3. Call `EnterPlanMode`, then present the plan with `ExitPlanMode`.
@@ -150,7 +171,7 @@ Write the file *before* entering plan mode. Plan mode blocks writes.
 **Done when:**
 
 - [ ] The brief carried the AC and Scope of Work verbatim - the sub-agent shares no context
-- [ ] Plan written to `.claude/task-develop/<TICKET>/plan.md`, before `EnterPlanMode`
+- [ ] Plan written to `.claude/task-develop/<TASK>/plan.md`, before `EnterPlanMode`
 - [ ] `## Post-approval workflow` is present and states steps 6-12 as instructions, not a summary
 - [ ] It carries the `### Progress` checklist and the resume instructions, copied in full
 - [ ] Every AC row names at least one task
@@ -188,8 +209,8 @@ Agent(subagent_type: "general-purpose", model: "sonnet", prompt: <brief>)
 
 The brief must contain:
 
-- The path to `.claude/task-develop/<TICKET>/plan.md`, and an instruction to read it in full
-- The ticket key
+- The path to `.claude/task-develop/<TASK>/plan.md`, and an instruction to read it in full
+- The task name, and the full path to the task file
 - An instruction to follow the repo's own `CLAUDE.md` conventions
 - An instruction to write the tests named in the plan's Test Plan, in the same change
 - An instruction to build and run the test suite, and to report the real output - a failing suite
@@ -214,7 +235,7 @@ Read `references/ac-audit.md` for the auditor brief.
 The auditor judges the **code and the tests**, not the plan's claims. A plan row saying "AC-3
 satisfied" proves nothing.
 
-- **Findings:** write them to `.claude/task-develop/<TICKET>/ac-audit.md`, then fix them. Re-run
+- **Findings:** write them to `.claude/task-develop/<TASK>/ac-audit.md`, then fix them. Re-run
   the audit afterwards to confirm the fix landed. Stop after 3 rounds and hand the remaining
   findings to the user - three failed attempts means something is wrong with the plan, not with
   the code.
@@ -232,7 +253,7 @@ satisfied" proves nothing.
 Invoke `Skill(skill: "corp-dev:PrReviewer")` on the local changes.
 
 Fix every finding that is valid. For a finding you disagree with, do not silently drop it: write
-the finding and your reasoning into `.claude/task-develop/<TICKET>/ac-audit.md`. Step 12 will need
+the finding and your reasoning into `.claude/task-develop/<TASK>/ac-audit.md`. Step 12 will need
 that reasoning to reply to the same comment on the PR.
 
 If PrReviewer is not available in this repo, say so and go on. Do not fake a review pass.
@@ -252,7 +273,7 @@ Report, in this order:
 3. AC audit result - each `AC-n`, met or not
 4. PrReviewer result - fixed, and disputed with reasoning
 5. Anything left out, and why
-6. The working files under `.claude/task-develop/<TICKET>/`
+6. The working files under `.claude/task-develop/<TASK>/`
 
 Then stop and wait.
 

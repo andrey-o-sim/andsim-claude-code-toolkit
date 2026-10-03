@@ -14,7 +14,7 @@ Use Opus. This is a judgement call, not a mechanical check.
 
 The sub-agent starts with no context. Give it:
 
-- Path to `.claude/task-develop/<TICKET>/plan.md`
+- Path to `.claude/task-develop/<TASK>/plan.md`
 - The Acceptance Criteria table, verbatim
 - The diff: `git diff <target-branch>...HEAD`
 - The repo path and the test commands from the plan's Verification section
@@ -43,11 +43,11 @@ the change stay separate.
 
 ## Findings file
 
-Write to `.claude/task-develop/<TICKET>/ac-audit.md`. Append each round rather than overwriting,
+Write to `.claude/task-develop/<TASK>/ac-audit.md`. Append each round rather than overwriting,
 so the history of what was found and fixed stays readable.
 
 ```markdown
-# <TICKET> - AC audit
+# <TASK> - AC audit
 
 ## Round 1 - <date>
 
