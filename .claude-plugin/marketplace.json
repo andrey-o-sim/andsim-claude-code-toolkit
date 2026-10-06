@@ -18,7 +18,7 @@
     {
       "name": "sdlc",
       "source": "./plugins/sdlc",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Sdlc plugin created in context of the Agentic Engineering course",
       "author": {
         "name": "Andrii Symonenko"
