@@ -55,7 +55,7 @@ You can also browse everything interactively with `/plugin`.
 
 | Plugin | Version | What it gives you |
 | --- | --- | --- |
-| `my-toolkit` | 1.3.0 | Toolkits created in context of the Agentic Engineering course. Contains four commands, two skills and one hook (see below). |
+| `my-toolkit` | 1.3.1 | Toolkits created in context of the Agentic Engineering course. Contains four commands, two skills and one hook (see below). |
 
 ### `my-toolkit` contents
 
@@ -71,10 +71,12 @@ You can also browse everything interactively with `/plugin`.
   minutes: the deploy job, the e2e job after it, and errors in the logs. It stops after 30 minutes
   with no new errors, or with a short report when the deploy or e2e fails. Never restarts or rolls
   back.
-- **Command `/morning-review`** — read-only review of new tasks on a board and open PRs that still
-  need your approval. Made to run as a Desktop scheduled task with the prompt `/morning-review`.
-  When Jira or Bitbucket is unreachable (for example, VPN is off), it retries every 10 minutes for
-  about one hour and then stops with a clear reason.
+- **Command `/morning-review jql="<JQL>" repos="<repos>" user="<my-username>"`** — read-only review
+  of new tasks on a board and open PRs that still need your approval. Made to run as a Desktop
+  scheduled task: put the full call with its arguments in the task prompt. Values go in double
+  quotes, because a JQL usually has spaces. A missing argument stops the run with a clear message
+  instead of a question. When Jira or Bitbucket is unreachable (for example, VPN is off), it
+  retries every 10 minutes for about one hour and then stops with a clear reason.
 - **Skill `task-develop`** — drives one task end to end, starting from a discussion. It works out
   with you what to build, writes it up as `docs/tasks/<name>.md` and waits for your yes, then plans
   with an Opus sub-agent, implements with a Sonnet agent, audits the result against the acceptance
@@ -92,7 +94,6 @@ You can also browse everything interactively with `/plugin`.
   `opensearch`. `allowed-tools` uses these names, so with other names the tools will ask for
   permission or not be found.
 - `<jenkins-mcp>` in `pr-watch` and `deploy-watch` is a placeholder for your Jenkins MCP server.
-- Fill in the `Config` block in `morning-review` (board JQL, repositories, your username).
 - `pr-watch` and `deploy-watch` use session-scoped scheduled tasks: they run only while the session
   is open and expire after 7 days. `CLAUDE_CODE_DISABLE_CRON=1` turns them off.
 
