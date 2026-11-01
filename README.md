@@ -55,7 +55,7 @@ You can also browse everything interactively with `/plugin`.
 
 | Plugin | Version | What it gives you |
 | --- | --- | --- |
-| `my-toolkit` | 1.3.1 | Toolkits created in context of the Agentic Engineering course. Contains four commands, two skills and one hook (see below). |
+| `my-toolkit` | 1.4.0 | Toolkits created in context of the Agentic Engineering course. Contains three commands, three skills and one hook (see below). |
 
 ### `my-toolkit` contents
 
@@ -71,7 +71,7 @@ You can also browse everything interactively with `/plugin`.
   minutes: the deploy job, the e2e job after it, and errors in the logs. It stops after 30 minutes
   with no new errors, or with a short report when the deploy or e2e fails. Never restarts or rolls
   back.
-- **Command `/morning-review jql="<JQL>" repos="<repos>" user="<my-username>"`** — read-only review
+- **Skill `/my-toolkit:morning-review jql="<JQL>" repos="<repos>" user="<my-username>"`** — read-only review
   of new tasks on a board and open PRs that still need your approval. Made to run as a Desktop
   scheduled task: put the full call with its arguments in the task prompt. Values go in double
   quotes, because a JQL usually has spaces. A missing argument stops the run with a clear message
@@ -88,7 +88,7 @@ You can also browse everything interactively with `/plugin`.
 - **Hook `pre-commit`** — a `PreToolUse` hook on `git commit` that runs build, `dotnet format style`
   and the tests, and blocks the commit with the reason when a step fails. See below.
 
-#### Before you use the watch and review commands
+#### Before you use the watch commands and the review skill
 
 - They expect local MCP servers named `atlassian-bitbucket-dc`, `atlassian-jira-dc` and
   `opensearch`. `allowed-tools` uses these names, so with other names the tools will ask for
